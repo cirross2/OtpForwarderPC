@@ -42,6 +42,26 @@ startBtn.addEventListener('click', async () => {
 
 refreshBtn.addEventListener('click', refreshDevices)
 
+const wirelessBtn = $('wireless')
+wirelessBtn.addEventListener('click', async () => {
+  const orig = wirelessBtn.textContent
+  wirelessBtn.disabled = true
+  wirelessBtn.textContent = '설정 중…'
+  try {
+    const r = await window.api.enableWireless()
+    if (r.ok) {
+      ipEl.value = r.ip
+      alert(`무선 모드 켜짐!\n${r.ip} 로 연결했어요. 이제 USB 케이블을 빼도 됩니다.\n(폰을 재부팅하면 다시 USB 연결 후 눌러주세요.)`)
+      refreshDevices()
+    } else {
+      alert(r.msg)
+    }
+  } finally {
+    wirelessBtn.disabled = false
+    wirelessBtn.textContent = orig
+  }
+})
+
 window.api.onMirrorState((on) => {
   mirroring = on
   if (on) {

@@ -75,6 +75,43 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
   return { ok: true }
 })
 
+// USB 연결된 폰의 IP를 찾는다 (Tailscale 100.64~127 우선, 없으면 WiFi)
+async function getPhoneIp(serial) {
+  const r = await adb(['-s', serial, 'shell', 'ip', '-4', 'addr'])
+  let tailscale = null, wifi = null
+  for (const line of r.stdout.split('\n')) {
+    const parts = line.trim().split(/\s+/)
+    const i = parts.indexOf('inet')
+    if (i < 0 || !parts[i + 1]) continue
+    const ip = parts[i + 1].split('/')[0]
+    const iface = parts[parts.length - 1]
+    const o = ip.split('.').map(Number)
+    if (o[0] === 100 && o[1] >= 64 && o[1] <= 127) tailscale = ip
+    else if (/wlan/.test(iface)) wifi = ip
+  }
+  return tailscale || wifi
+}
+
+// 무선 모드 켜기: USB 연결된 폰에 tcpip 5555 적용 + IP 반환
+ipcMain.handle('enable-wireless', async () => {
+  const r = await adb(['devices'])
+  const usb = r.stdout
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith('device'))
+    .map((l) => l.split(/\s+/)[0])
+    .filter((s) => !s.includes(':'))
+  if (!usb.length) return { ok: false, msg: 'USB로 폰을 먼저 연결한 뒤 눌러주세요.' }
+  const serial = usb[0]
+  const ip = await getPhoneIp(serial)
+  if (!ip) return { ok: false, msg: '폰 IP를 찾지 못했습니다. WiFi/Tailscale 연결을 확인하세요.' }
+  await adb(['-s', serial, 'tcpip', '5555'])
+  await new Promise((res) => setTimeout(res, 1500))
+  await adb(['connect', `${ip}:5555`])
+  return { ok: true, ip }
+})
+
 // ---- 자동 업데이트 ----
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
