@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   requestPort: (host) => ipcRenderer.invoke('request-port', host),
   wakePhone: () => ipcRenderer.invoke('wake-phone'),
   fcmStatus: () => ipcRenderer.invoke('fcm-status'),
-  pickFcmKey: () => ipcRenderer.invoke('pick-fcm-key'),
+  pickSetup: () => ipcRenderer.invoke('pick-setup'),
   pcAddress: () => ipcRenderer.invoke('pc-address'),
   onPortReceived: (cb) => ipcRenderer.on('port-received', (_e, v) => cb(v)),
   onMirrorState: (cb) => ipcRenderer.on('mirror-state', (_e, v) => cb(v)),

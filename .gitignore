@@ -10,3 +10,5 @@ resources/scrcpy/
 .DS_Store
 service-account.json
 test-wake.js
+
+otp-setup.json

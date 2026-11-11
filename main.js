@@ -175,24 +175,29 @@ ipcMain.handle('wake-phone', async () => {
 
 ipcMain.handle('fcm-status', () => ({ hasKey: !!fcmApp, hasToken: !!phoneToken }))
 
-// FCM 서비스 계정 키(json)를 직접 골라 userData에 복사하고 초기화한다.
-ipcMain.handle('pick-fcm-key', async () => {
+// 설정 파일(json)을 골라 폰 IP + FCM 키를 한 번에 적용한다.
+// 받는 형식: { "phoneIp": "100.x.x.x", "serviceAccount": {..SA..} }  또는 순수 service-account.json
+ipcMain.handle('pick-setup', async () => {
   const r = await dialog.showOpenDialog(win, {
-    title: 'FCM 서비스 계정 키 선택 (service-account.json)',
+    title: '설정 파일 선택 (otp-setup.json 또는 service-account.json)',
     filters: [{ name: 'JSON', extensions: ['json'] }],
     properties: ['openFile'],
   })
   if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, canceled: true }
   try {
-    const raw = fs.readFileSync(r.filePaths[0], 'utf8')
-    const j = JSON.parse(raw)
-    if (j.type !== 'service_account' || !j.private_key) {
-      return { ok: false, msg: 'Firebase 서비스 계정 키가 아닙니다.' }
+    const j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'))
+    let phoneIp = null
+    if (j.phoneIp) phoneIp = String(j.phoneIp).trim()
+    const sa = j.serviceAccount || (j.type === 'service_account' ? j : null)
+    if (sa && sa.type === 'service_account' && sa.private_key) {
+      fs.writeFileSync(path.join(app.getPath('userData'), 'service-account.json'), JSON.stringify(sa))
+      fcmApp = null
+      initFcm()
     }
-    fs.writeFileSync(path.join(app.getPath('userData'), 'service-account.json'), raw)
-    fcmApp = null
-    initFcm()
-    return { ok: !!fcmApp, hasKey: !!fcmApp }
+    if (!phoneIp && !fcmApp) {
+      return { ok: false, msg: '폰 IP도 FCM 키도 없는 파일입니다.' }
+    }
+    return { ok: true, phoneIp, hasKey: !!fcmApp }
   } catch (e) {
     return { ok: false, msg: String((e && e.message) || e) }
   }

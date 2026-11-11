@@ -197,9 +197,18 @@ async function refreshFcm() {
   } catch (e) {}
 }
 pickKeyBtn.addEventListener('click', async () => {
-  const r = await window.api.pickFcmKey()
-  if (r && r.ok) { alert('FCM 키 설정 완료 — 이제 PC가 잠든 폰을 깨울 수 있어요.'); refreshFcm() }
-  else if (r && !r.canceled) alert(r.msg || 'FCM 키 설정 실패')
+  const r = await window.api.pickSetup()
+  if (r && r.ok) {
+    if (r.phoneIp) { ipEl.value = r.phoneIp; savePhone(r.phoneIp) }
+    const parts = []
+    if (r.phoneIp) parts.push(`폰 주소 ${r.phoneIp}`)
+    if (r.hasKey) parts.push('FCM 키 OK')
+    alert('설정을 불러왔어요' + (parts.length ? ' — ' + parts.join(' · ') : '') + '.')
+    refreshFcm()
+    if (r.phoneIp) doConnect()
+  } else if (r && !r.canceled) {
+    alert(r.msg || '설정 불러오기 실패')
+  }
 })
 
 ;(async () => {
