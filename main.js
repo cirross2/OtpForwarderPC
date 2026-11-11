@@ -101,8 +101,21 @@ ipcMain.handle('get-devices', async (_e, ip) => {
 ipcMain.handle('start-mirror', async (_e, ip) => {
   if (mirroring) return { ok: false, msg: '이미 미러링 중입니다' }
   const target = withPort(ip)
-  const sel = target ? ['-s', target] : []
   if (target) await adb(['connect', target])
+
+  // 실제로 연결된 기기를 쓴다(폰 주소의 포트가 바뀌어 죽어 있을 수 있음).
+  const dv = await adb(['devices'])
+  const devices = dv.stdout
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith('device'))
+    .map((l) => l.split(/\s+/)[0])
+  if (!devices.length) {
+    return { ok: false, msg: '폰이 연결되지 않았습니다. "연결"을 먼저 눌러주세요.' }
+  }
+  const dev = target && devices.includes(target) ? target : devices[0]
+  const sel = ['-s', dev]
 
   const sendCmd = (cmd) =>
     adb([...sel, 'shell', 'am', 'broadcast', '-n', RECEIVER, '--es', 'cmd', cmd])
@@ -113,16 +126,16 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
   if (win) win.webContents.send('mirror-state', true)
 
   // 하트비트: 미러링 동안 60초마다 pause를 재전송한다.
-  // PC가 죽거나 창을 닫으면 폰이 3분 뒤 자동으로 포워딩을 재개한다(안전장치).
   const heartbeat = setInterval(() => { sendCmd('pause') }, 60000)
 
   // 2) 미러링 (무선/원격에선 --stay-awake가 안 먹으므로 화면 꺼짐 타임아웃을 늘려 유지)
+  const startedAt = Date.now()
   const sc = spawn(
     SCRCPY(),
     [...sel, '--stay-awake', '--screen-off-timeout=1800', '--window-title', 'Second Phone'],
     { windowsHide: false }
   )
-  // 3) 창 닫히면 포워딩 재개 (오류/강제종료에도)
+  // 3) 창 닫히면 포워딩 재개 (오류/강제종료에도). 즉시 죽으면 실패 알림.
   let resumed = false
   const resume = async () => {
     if (resumed) return
@@ -130,7 +143,11 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
     clearInterval(heartbeat)
     await sendCmd('resume')
     mirroring = false
-    if (win && !win.isDestroyed()) win.webContents.send('mirror-state', false)
+    const quickFail = Date.now() - startedAt < 2500
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('mirror-state', false)
+      if (quickFail) win.webContents.send('mirror-failed', { dev })
+    }
   }
   sc.on('close', resume)
   sc.on('error', resume)

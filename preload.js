@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   pcAddress: () => ipcRenderer.invoke('pc-address'),
   onPortReceived: (cb) => ipcRenderer.on('port-received', (_e, v) => cb(v)),
   onMirrorState: (cb) => ipcRenderer.on('mirror-state', (_e, v) => cb(v)),
+  onMirrorFailed: (cb) => ipcRenderer.on('mirror-failed', (_e, v) => cb(v)),
   onUpdate: (cb) => ipcRenderer.on('update', (_e, v) => cb(v)),
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),

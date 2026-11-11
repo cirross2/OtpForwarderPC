@@ -166,6 +166,10 @@ window.api.onMirrorState((on) => {
   }
 })
 
+window.api.onMirrorFailed(() => {
+  alert('미러링이 바로 종료됐어요.\n폰 주소 칸의 포트가 바뀌어 죽었을 수 있어요. "연결"을 다시 누르거나 칸을 비우고 시도하면 연결된 기기로 미러링합니다.')
+})
+
 window.api.onUpdate((u) => {
   switch (u.state) {
     case 'checking': updateEl.textContent = '업데이트 확인 중…'; break
