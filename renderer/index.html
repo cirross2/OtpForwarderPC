@@ -9,47 +9,48 @@
 <body>
   <main>
     <header>
-      <div class="logo">🔒</div>
-      <h1>OTP 미러링</h1>
-      <p class="sub">세컨드폰 화면을 PC로. 미러링 중엔 포워딩 자동 중지.</p>
+      <h1>미러링</h1>
+      <p class="sub">세컨드폰 화면을 PC로. 미러링 중엔 포워딩이 멈춥니다.</p>
     </header>
 
-    <section class="card">
-      <div class="row">
-        <span class="label">연결된 폰</span>
-        <span id="device" class="value">확인 중…</span>
+    <section class="card status-card">
+      <span class="dot" id="dot"></span>
+      <div class="status-text">
+        <div class="status-title" id="statusTitle">폰 확인 중…</div>
+        <div class="status-addr mono" id="statusAddr"></div>
       </div>
-      <button id="refresh" class="ghost">새로고침</button>
+      <button class="icon-btn" id="refresh" title="새로고침" aria-label="새로고침">↻</button>
     </section>
 
     <section class="card">
-      <label class="label" for="ip">연결 주소 <span class="dim">(IP 또는 IP:포트)</span></label>
-      <input id="ip" type="text" placeholder="예: 100.65.206.33:37937" />
-      <div class="btnrow">
-        <button id="discover" class="ghost">🔍 자동 감지 (같은 WiFi)</button>
-        <button id="connect" class="ghost">연결</button>
+      <label class="field-label" for="ip">폰 주소</label>
+      <div class="input-row">
+        <input id="ip" type="text" placeholder="100.65.206.33 (Tailscale IP)" spellcheck="false" />
+        <button id="connect" class="btn-secondary">연결</button>
       </div>
-      <button id="wireless" class="ghost">📡 무선 모드 켜기 (USB 연결 상태에서 1회)</button>
+      <button id="discover" class="btn-text">같은 WiFi에서 자동 감지</button>
     </section>
 
+    <button id="start" class="btn-primary" disabled>미러링 시작</button>
+    <div id="state" class="state idle">대기 중 · 포워딩 활성</div>
     <div id="pushbanner" class="banner" hidden></div>
 
-    <button id="start" class="primary" disabled>미러링 시작</button>
-
-    <div id="state" class="state idle">● 대기 중 — 포워딩 활성</div>
-
-    <section class="card dimcard">
-      <div class="row">
-        <span class="label">이 PC 주소</span>
-        <span id="pcaddr" class="value mono">—</span>
+    <section class="card subtle">
+      <div class="mini-row">
+        <span class="mini-label">이 PC 주소</span>
+        <span id="pcaddr" class="mono mini-value">—</span>
       </div>
-      <p class="dim small">폰 앱의 "PC 주소"에 이 값을 넣으면, 재부팅 후 바뀐 포트를 폰이 이 PC로 자동 전송합니다. (여러 PC면 각 PC 주소를 폰에 줄바꿈으로 추가)</p>
+      <details class="advanced">
+        <summary>USB로 무선 모드 켜기</summary>
+        <p class="hint">폰을 USB로 연결한 상태에서 1회 실행하면 무선(5555)으로 전환합니다.</p>
+        <button id="wireless" class="btn-secondary full">무선 모드 켜기</button>
+      </details>
     </section>
 
     <footer>
       <span id="version">v—</span>
       <span id="update" class="dim">업데이트 확인 중…</span>
-      <button id="installUpdate" class="link" hidden>지금 설치</button>
+      <button id="installUpdate" class="btn-text" hidden>지금 설치</button>
     </footer>
   </main>
   <script src="renderer.js"></script>

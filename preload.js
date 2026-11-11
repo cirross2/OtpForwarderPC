@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
   startMirror: (ip) => ipcRenderer.invoke('start-mirror', ip),
   enableWireless: () => ipcRenderer.invoke('enable-wireless'),
   discoverWireless: () => ipcRenderer.invoke('discover-wireless'),
+  requestPort: (host) => ipcRenderer.invoke('request-port', host),
   pcAddress: () => ipcRenderer.invoke('pc-address'),
   onPortReceived: (cb) => ipcRenderer.on('port-received', (_e, v) => cb(v)),
   onMirrorState: (cb) => ipcRenderer.on('mirror-state', (_e, v) => cb(v)),

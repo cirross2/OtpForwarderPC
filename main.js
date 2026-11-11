@@ -68,24 +68,50 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
   const sel = target ? ['-s', target] : []
   if (target) await adb(['connect', target])
 
+  const sendCmd = (cmd) =>
+    adb([...sel, 'shell', 'am', 'broadcast', '-n', RECEIVER, '--es', 'cmd', cmd])
+
   // 1) 포워딩 일시중지
-  await adb([...sel, 'shell', 'am', 'broadcast', '-n', RECEIVER, '--es', 'cmd', 'pause'])
+  await sendCmd('pause')
   mirroring = true
   if (win) win.webContents.send('mirror-state', true)
+
+  // 하트비트: 미러링 동안 60초마다 pause를 재전송한다.
+  // PC가 죽거나 창을 닫으면 폰이 3분 뒤 자동으로 포워딩을 재개한다(안전장치).
+  const heartbeat = setInterval(() => { sendCmd('pause') }, 60000)
 
   // 2) 미러링
   const sc = spawn(SCRCPY(), [...sel, '--stay-awake', '--window-title', 'Second Phone'], {
     windowsHide: false,
   })
   // 3) 창 닫히면 포워딩 재개 (오류/강제종료에도)
+  let resumed = false
   const resume = async () => {
-    await adb([...sel, 'shell', 'am', 'broadcast', '-n', RECEIVER, '--es', 'cmd', 'resume'])
+    if (resumed) return
+    resumed = true
+    clearInterval(heartbeat)
+    await sendCmd('resume')
     mirroring = false
     if (win && !win.isDestroyed()) win.webContents.send('mirror-state', false)
   }
   sc.on('close', resume)
   sc.on('error', resume)
   return { ok: true }
+})
+
+// PC가 꺼진 사이 포트가 바뀌어도, 폰의 고정 포트 서버(47801)에 현재 포트를 요청한다.
+ipcMain.handle('request-port', async (_e, host) => {
+  const h = String(host || '').trim().split(':')[0]
+  if (!h) return null
+  return await new Promise((resolve) => {
+    const req = http.get({ host: h, port: 47801, path: '/port', timeout: 12000 }, (res) => {
+      let b = ''
+      res.on('data', (c) => (b += c))
+      res.on('end', () => { try { resolve(JSON.parse(b)) } catch (e) { resolve(null) } })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
 })
 
 // 같은 WiFi면 폰이 광고하는 무선 디버깅 포트를 mDNS로 자동 감지한다.
