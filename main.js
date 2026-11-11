@@ -11,6 +11,7 @@ const { getMessaging } = require('firebase-admin/messaging')
 const PKG = 'com.boss.otpforwarder'
 const RECEIVER = `${PKG}/.ControlReceiver`
 const PORT_SERVER_PORT = 47800
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ---- FCM: 잠든 폰을 깨우기 ----
 let fcmApp = null
@@ -191,6 +192,30 @@ ipcMain.handle('wake-phone', async () => {
 })
 
 ipcMain.handle('fcm-status', () => ({ hasKey: !!fcmApp, hasToken: !!phoneToken }))
+
+// 연결된 뒤 tcpip 5555를 켜서 '고정 포트 5555'로 전환한다(재부팅 후 1회 자동복구).
+// 이미 5555면 그대로 둔다. 바뀌는 무선 포트를 다리 삼아 5555를 되살린다.
+ipcMain.handle('ensure-tcpip', async (_e, host) => {
+  const h = String(host || '').trim().split(':')[0]
+  if (!h) return { ok: false }
+  const list = async () => {
+    const dv = await adb(['devices'])
+    return dv.stdout
+      .split('\n').slice(1).map((l) => l.trim())
+      .filter((l) => l.endsWith('device')).map((l) => l.split(/\s+/)[0])
+      .filter((s) => s.startsWith(h + ':'))
+  }
+  let devices = await list()
+  if (!devices.length) return { ok: false }
+  if (devices.includes(`${h}:5555`)) return { ok: true, addr: `${h}:5555` } // 이미 고정됨
+  // 현재 연결(무선 포트)로 tcpip 5555 활성화 → adbd 재시작 → 5555로 재연결
+  await adb(['-s', devices[0], 'tcpip', '5555'])
+  await sleep(1800)
+  await adb(['connect', `${h}:5555`])
+  devices = await list()
+  const ok = devices.includes(`${h}:5555`)
+  return { ok, addr: ok ? `${h}:5555` : null }
+})
 
 // 설정 파일(json)을 골라 폰 IP + FCM 키를 한 번에 적용한다.
 // 받는 형식: { "phoneIp": "100.x.x.x", "serviceAccount": {..SA..} }  또는 순수 service-account.json

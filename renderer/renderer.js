@@ -94,6 +94,16 @@ async function doConnect() {
   }
   if (!addr) { setStatus(false, '폰 주소를 입력하세요'); return }
   await refreshDevices()
+  // 연결됐으면 tcpip 5555를 켜 '고정 포트 5555'로 자동 전환(재부팅 후 1회 복구)
+  const host = ipEl.value.trim().split(':')[0]
+  if (host) {
+    const t = await window.api.ensureTcpip(host)
+    if (t && t.ok && t.addr) {
+      ipEl.value = t.addr
+      savePhone(host)
+      await refreshDevices()
+    }
+  }
 }
 
 // 새로고침: 포트가 바뀌었을 수 있으니 폰에 현재 포트를 다시 요청한다.
