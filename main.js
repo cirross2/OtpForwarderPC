@@ -80,10 +80,12 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
   // PC가 죽거나 창을 닫으면 폰이 3분 뒤 자동으로 포워딩을 재개한다(안전장치).
   const heartbeat = setInterval(() => { sendCmd('pause') }, 60000)
 
-  // 2) 미러링
-  const sc = spawn(SCRCPY(), [...sel, '--stay-awake', '--window-title', 'Second Phone'], {
-    windowsHide: false,
-  })
+  // 2) 미러링 (무선/원격에선 --stay-awake가 안 먹으므로 화면 꺼짐 타임아웃을 늘려 유지)
+  const sc = spawn(
+    SCRCPY(),
+    [...sel, '--stay-awake', '--screen-off-timeout=1800', '--window-title', 'Second Phone'],
+    { windowsHide: false }
+  )
   // 3) 창 닫히면 포워딩 재개 (오류/강제종료에도)
   let resumed = false
   const resume = async () => {
