@@ -101,3 +101,16 @@ footer {
   font-weight: 700;
   padding: 0;
 }
+.btnrow { display: flex; gap: 16px; align-items: center; }
+.banner {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 10px;
+  border-radius: 11px;
+}
+.dimcard { gap: 6px; }
+.mono { font-family: ui-monospace, "Consolas", monospace; }
+.small { font-size: 11px; line-height: 1.4; }

@@ -23,14 +23,28 @@
     </section>
 
     <section class="card">
-      <label class="label" for="ip">무선·Tailscale IP <span class="dim">(선택, USB면 비워두세요)</span></label>
-      <input id="ip" type="text" placeholder="예: 100.x.x.x 또는 172.30.1.100" />
+      <label class="label" for="ip">연결 주소 <span class="dim">(IP 또는 IP:포트)</span></label>
+      <input id="ip" type="text" placeholder="예: 100.65.206.33:37937" />
+      <div class="btnrow">
+        <button id="discover" class="ghost">🔍 자동 감지 (같은 WiFi)</button>
+        <button id="connect" class="ghost">연결</button>
+      </div>
       <button id="wireless" class="ghost">📡 무선 모드 켜기 (USB 연결 상태에서 1회)</button>
     </section>
+
+    <div id="pushbanner" class="banner" hidden></div>
 
     <button id="start" class="primary" disabled>미러링 시작</button>
 
     <div id="state" class="state idle">● 대기 중 — 포워딩 활성</div>
+
+    <section class="card dimcard">
+      <div class="row">
+        <span class="label">이 PC 주소</span>
+        <span id="pcaddr" class="value mono">—</span>
+      </div>
+      <p class="dim small">폰 앱의 "PC 주소"에 이 값을 넣으면, 재부팅 후 바뀐 포트를 폰이 이 PC로 자동 전송합니다. (여러 PC면 각 PC 주소를 폰에 줄바꿈으로 추가)</p>
+    </section>
 
     <footer>
       <span id="version">v—</span>

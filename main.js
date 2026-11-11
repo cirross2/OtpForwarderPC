@@ -1,10 +1,13 @@
 const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron')
 const path = require('path')
+const os = require('os')
+const http = require('http')
 const { spawn, execFile } = require('child_process')
 const { autoUpdater } = require('electron-updater')
 
 const PKG = 'com.boss.otpforwarder'
 const RECEIVER = `${PKG}/.ControlReceiver`
+const PORT_SERVER_PORT = 47800
 
 // 내장 scrcpy/adb 경로 (개발 vs 패키징)
 function resBase() {
@@ -21,7 +24,7 @@ let mirroring = false
 function createWindow() {
   win = new BrowserWindow({
     width: 440,
-    height: 580,
+    height: 680,
     resizable: false,
     title: 'OTP 미러링',
     backgroundColor: '#1c1c1e',
@@ -39,8 +42,17 @@ function adb(args) {
   })
 }
 
+// 주소에 포트가 없으면 기본 포트를 붙인다. 있으면 그대로(무선 디버깅 포트 지원).
+function withPort(addr, def = 5555) {
+  if (!addr) return null
+  const a = String(addr).trim()
+  if (!a) return null
+  return a.includes(':') ? a : `${a}:${def}`
+}
+
 ipcMain.handle('get-devices', async (_e, ip) => {
-  if (ip) await adb(['connect', `${ip}:5555`])
+  const target = withPort(ip)
+  if (target) await adb(['connect', target])
   const r = await adb(['devices'])
   return r.stdout
     .split('\n')
@@ -52,8 +64,9 @@ ipcMain.handle('get-devices', async (_e, ip) => {
 
 ipcMain.handle('start-mirror', async (_e, ip) => {
   if (mirroring) return { ok: false, msg: '이미 미러링 중입니다' }
-  const sel = ip ? ['-s', `${ip}:5555`] : []
-  if (ip) await adb(['connect', `${ip}:5555`])
+  const target = withPort(ip)
+  const sel = target ? ['-s', target] : []
+  if (target) await adb(['connect', target])
 
   // 1) 포워딩 일시중지
   await adb([...sel, 'shell', 'am', 'broadcast', '-n', RECEIVER, '--es', 'cmd', 'pause'])
@@ -75,6 +88,18 @@ ipcMain.handle('start-mirror', async (_e, ip) => {
   return { ok: true }
 })
 
+// 같은 WiFi면 폰이 광고하는 무선 디버깅 포트를 mDNS로 자동 감지한다.
+ipcMain.handle('discover-wireless', async () => {
+  const r = await adb(['mdns', 'services'])
+  for (const line of r.stdout.split('\n')) {
+    if (line.includes('_adb-tls-connect._tcp')) {
+      const m = line.match(/(\d+\.\d+\.\d+\.\d+):(\d+)/)
+      if (m) return { ok: true, ip: m[1], port: Number(m[2]), addr: `${m[1]}:${m[2]}` }
+    }
+  }
+  return { ok: false }
+})
+
 // USB 연결된 폰의 IP를 찾는다 (Tailscale 100.64~127 우선, 없으면 WiFi)
 async function getPhoneIp(serial) {
   const r = await adb(['-s', serial, 'shell', 'ip', '-4', 'addr'])
@@ -92,7 +117,7 @@ async function getPhoneIp(serial) {
   return tailscale || wifi
 }
 
-// 무선 모드 켜기: USB 연결된 폰에 tcpip 5555 적용 + IP 반환
+// 무선 모드 켜기: USB 연결된 폰에 tcpip 5555 적용 + IP 반환 (옛 방식, 폴백용)
 ipcMain.handle('enable-wireless', async () => {
   const r = await adb(['devices'])
   const usb = r.stdout
@@ -111,6 +136,53 @@ ipcMain.handle('enable-wireless', async () => {
   await adb(['connect', `${ip}:5555`])
   return { ok: true, ip }
 })
+
+// 이 PC의 Tailscale 주소(폰에 등록할 값)를 돌려준다.
+ipcMain.handle('pc-address', () => {
+  const ifs = os.networkInterfaces()
+  for (const name in ifs) {
+    for (const a of ifs[name] || []) {
+      if (a.family === 'IPv4' && !a.internal) {
+        const o = a.address.split('.').map(Number)
+        if (o[0] === 100 && o[1] >= 64 && o[1] <= 127) return a.address
+      }
+    }
+  }
+  return null
+})
+
+// 폰이 재부팅 후 바뀐 무선 포트를 이 PC로 직접 쏴주는 수신 서버.
+function startPortServer() {
+  const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url.startsWith('/port')) {
+      let body = ''
+      req.on('data', (c) => {
+        body += c
+        if (body.length > 2000) req.destroy()
+      })
+      req.on('end', async () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end('{"ok":true}')
+        let ip, port
+        try {
+          const j = JSON.parse(body)
+          ip = j.ip
+          port = j.port
+        } catch (e) {}
+        if (ip && port && /^\d+\.\d+\.\d+\.\d+$/.test(String(ip))) {
+          const addr = `${ip}:${port}`
+          await adb(['connect', addr])
+          if (win && !win.isDestroyed()) win.webContents.send('port-received', { ip, port, addr })
+        }
+      })
+    } else {
+      res.writeHead(404)
+      res.end()
+    }
+  })
+  server.on('error', () => {})
+  server.listen(PORT_SERVER_PORT, '0.0.0.0')
+}
 
 // ---- 자동 업데이트 ----
 autoUpdater.autoDownload = true
@@ -133,6 +205,7 @@ ipcMain.handle('app-version', () => app.getVersion())
 
 app.whenReady().then(() => {
   createWindow()
+  startPortServer()
   win.webContents.once('did-finish-load', setupUpdater)
 })
 
