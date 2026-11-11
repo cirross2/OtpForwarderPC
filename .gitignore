@@ -1,0 +1,10 @@
+# 의존성 / 빌드 산출물
+node_modules/
+dist/
+
+# 내장 바이너리(third-party scrcpy) — 빌드 시 resources/scrcpy 에 배치 (BUILD.md 참고)
+resources/scrcpy/
+
+# 기타
+*.log
+.DS_Store
