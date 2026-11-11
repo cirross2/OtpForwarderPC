@@ -1,7 +1,7 @@
 {
   "name": "otpforwarder-pc",
   "productName": "OTP 미러링",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "세컨드폰 미러링 + 텔레그램 포워딩 자동 전환",
   "main": "main.js",
   "author": "Boss",
@@ -54,6 +54,7 @@
     "electron-builder": "25.1.8"
   },
   "dependencies": {
-    "electron-updater": "6.3.9"
+    "electron-updater": "6.3.9",
+    "firebase-admin": "^14.5.0"
   }
 }

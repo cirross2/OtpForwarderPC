@@ -1,13 +1,49 @@
-const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, dialog } = require('electron')
 const path = require('path')
 const os = require('os')
+const fs = require('fs')
 const http = require('http')
 const { spawn, execFile } = require('child_process')
 const { autoUpdater } = require('electron-updater')
+const { initializeApp, cert, getApp, getApps } = require('firebase-admin/app')
+const { getMessaging } = require('firebase-admin/messaging')
 
 const PKG = 'com.boss.otpforwarder'
 const RECEIVER = `${PKG}/.ControlReceiver`
 const PORT_SERVER_PORT = 47800
+
+// ---- FCM: 잠든 폰을 깨우기 ----
+let fcmApp = null
+let phoneToken = ''
+
+function initFcm() {
+  if (getApps().length > 0) { fcmApp = getApp(); return }
+  const candidates = [
+    path.join(app.getPath('userData'), 'service-account.json'),
+    path.join(process.resourcesPath || '', 'service-account.json'),
+    path.join(__dirname, 'service-account.json'),
+  ]
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const sa = JSON.parse(fs.readFileSync(p, 'utf8'))
+        fcmApp = initializeApp({ credential: cert(sa) })
+        return
+      }
+    } catch (e) {}
+  }
+}
+
+const tokenFile = () => path.join(app.getPath('userData'), 'phone-token.txt')
+function loadToken() {
+  try { phoneToken = fs.readFileSync(tokenFile(), 'utf8').trim() } catch (e) { phoneToken = '' }
+}
+function saveToken(t) {
+  if (t && t !== phoneToken) {
+    phoneToken = t
+    try { fs.writeFileSync(tokenFile(), t) } catch (e) {}
+  }
+}
 
 // 내장 scrcpy/adb 경로 (개발 vs 패키징)
 function resBase() {
@@ -109,11 +145,57 @@ ipcMain.handle('request-port', async (_e, host) => {
     const req = http.get({ host: h, port: 47801, path: '/port', timeout: 12000 }, (res) => {
       let b = ''
       res.on('data', (c) => (b += c))
-      res.on('end', () => { try { resolve(JSON.parse(b)) } catch (e) { resolve(null) } })
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(b)
+          if (j && j.token) saveToken(j.token)
+          resolve(j)
+        } catch (e) { resolve(null) }
+      })
     })
     req.on('error', () => resolve(null))
     req.on('timeout', () => { req.destroy(); resolve(null) })
   })
+})
+
+// 잠든 폰을 FCM으로 깨운다(죽어 있어도 구글이 깨움). 토큰이 있어야 함.
+ipcMain.handle('wake-phone', async () => {
+  if (!fcmApp || !phoneToken) return { ok: false, reason: !fcmApp ? 'no-key' : 'no-token' }
+  try {
+    await getMessaging(fcmApp).send({
+      token: phoneToken,
+      android: { priority: 'high' },
+      data: { type: 'wake' },
+    })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, msg: String((e && e.message) || e) }
+  }
+})
+
+ipcMain.handle('fcm-status', () => ({ hasKey: !!fcmApp, hasToken: !!phoneToken }))
+
+// FCM 서비스 계정 키(json)를 직접 골라 userData에 복사하고 초기화한다.
+ipcMain.handle('pick-fcm-key', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'FCM 서비스 계정 키 선택 (service-account.json)',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  })
+  if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, canceled: true }
+  try {
+    const raw = fs.readFileSync(r.filePaths[0], 'utf8')
+    const j = JSON.parse(raw)
+    if (j.type !== 'service_account' || !j.private_key) {
+      return { ok: false, msg: 'Firebase 서비스 계정 키가 아닙니다.' }
+    }
+    fs.writeFileSync(path.join(app.getPath('userData'), 'service-account.json'), raw)
+    fcmApp = null
+    initFcm()
+    return { ok: !!fcmApp, hasKey: !!fcmApp }
+  } catch (e) {
+    return { ok: false, msg: String((e && e.message) || e) }
+  }
 })
 
 // 같은 WiFi면 폰이 광고하는 무선 디버깅 포트를 mDNS로 자동 감지한다.
@@ -191,12 +273,14 @@ function startPortServer() {
       req.on('end', async () => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end('{"ok":true}')
-        let ip, port
+        let ip, port, token
         try {
           const j = JSON.parse(body)
           ip = j.ip
           port = j.port
+          token = j.token
         } catch (e) {}
+        if (token) saveToken(token)
         if (ip && port && /^\d+\.\d+\.\d+\.\d+$/.test(String(ip))) {
           const addr = `${ip}:${port}`
           await adb(['connect', addr])
@@ -232,6 +316,8 @@ ipcMain.handle('check-update', () => { try { autoUpdater.checkForUpdates() } cat
 ipcMain.handle('app-version', () => app.getVersion())
 
 app.whenReady().then(() => {
+  loadToken()
+  initFcm()
   createWindow()
   startPortServer()
   win.webContents.once('did-finish-load', setupUpdater)

@@ -78,8 +78,20 @@ startBtn.addEventListener('click', async () => {
   }
 })
 
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)) }
+
 async function doConnect() {
-  const addr = await resolveAddr()
+  let addr = await resolveAddr()
+  // 포트 요청이 실패(폰이 자고 있어 응답 없음)하면 FCM으로 깨우고 재시도
+  if (addr && !addr.includes(':')) {
+    const w = await window.api.wakePhone()
+    if (w && w.ok) {
+      statusTitle.textContent = '폰 깨우는 중…'
+      statusAddr.textContent = ''
+      await sleep(4500)
+      addr = await resolveAddr()
+    }
+  }
   if (!addr) { setStatus(false, '폰 주소를 입력하세요'); return }
   await refreshDevices()
 }
@@ -170,10 +182,31 @@ window.api.onUpdate((u) => {
 
 installBtn.addEventListener('click', () => window.api.installUpdate())
 
+const fcmStatusEl = $('fcmStatus')
+const pickKeyBtn = $('pickKey')
+async function refreshFcm() {
+  try {
+    const s = await window.api.fcmStatus()
+    if (s.hasKey) {
+      fcmStatusEl.textContent = s.hasToken ? '준비됨' : '키 OK · 폰 연결 대기'
+      fcmStatusEl.className = 'ok'
+    } else {
+      fcmStatusEl.textContent = '키 없음'
+      fcmStatusEl.className = 'dim'
+    }
+  } catch (e) {}
+}
+pickKeyBtn.addEventListener('click', async () => {
+  const r = await window.api.pickFcmKey()
+  if (r && r.ok) { alert('FCM 키 설정 완료 — 이제 PC가 잠든 폰을 깨울 수 있어요.'); refreshFcm() }
+  else if (r && !r.canceled) alert(r.msg || 'FCM 키 설정 실패')
+})
+
 ;(async () => {
   versionEl.textContent = 'v' + (await window.api.appVersion())
   const pc = await window.api.pcAddress()
   pcaddrEl.textContent = pc || '테일스케일 미연결'
+  refreshFcm()
 
   // 1) 저장된 폰 주소가 있으면 포트를 요청해 자동 연결
   const saved = loadPhone()

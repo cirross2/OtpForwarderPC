@@ -8,3 +8,5 @@ resources/scrcpy/
 # 기타
 *.log
 .DS_Store
+service-account.json
+test-wake.js
